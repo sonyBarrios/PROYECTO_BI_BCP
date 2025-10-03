@@ -1,0 +1,1171 @@
+-- CREACION DE LAS TABLAS PARA LA CAPA RAW (transaccionales)--------- 
+
+CREATE SCHEMA IF NOT EXISTS tr_raw_bcp; 
+
+ 
+
+-- Tabla de Clientes 
+
+CREATE TABLE tr_raw_bcp.cliente ( 
+
+    cliente_id VARCHAR(20) PRIMARY KEY, 
+
+    nombre_completo VARCHAR(100) NOT NULL, 
+
+    documento_identidad VARCHAR(20) UNIQUE NOT NULL, 
+
+    email VARCHAR(100), 
+
+    telefono VARCHAR(50), 
+
+    fecha_nacimiento DATE 
+
+); 
+
+ 
+
+-- Tabla de Cuentas 
+
+CREATE TABLE tr_raw_bcp.cuenta ( 
+
+    cuenta_id VARCHAR(20) PRIMARY KEY, 
+
+    cliente_id VARCHAR(20) NOT NULL, 
+
+    tipo_cuenta VARCHAR(20) NOT NULL, 
+
+    fecha_creacion DATE NOT NULL, 
+
+    estado_cuenta VARCHAR(20) NOT NULL, 
+
+    saldo_total DECIMAL(18,2), 
+
+    CONSTRAINT fk_cliente 
+
+        FOREIGN KEY (cliente_id) REFERENCES tr_raw_bcp.cliente(cliente_id) 
+
+        ON DELETE CASCADE 
+
+); 
+
+ 
+
+-- Tabla de Dispositivos 
+
+CREATE TABLE tr_raw_bcp.dispositivo ( 
+
+    dispositivo_id VARCHAR(20) PRIMARY KEY, 
+
+    tipo_dispositivo VARCHAR(50) NOT NULL, 
+
+    sistema_operativo VARCHAR(50), 
+
+    version_so VARCHAR(20) 
+
+); 
+
+ 
+
+-- Tabla de Ubicaciones 
+
+CREATE TABLE tr_raw_bcp.ubicacion ( 
+
+    ubicacion_id VARCHAR(20) PRIMARY KEY, 
+
+    pais VARCHAR(50), 
+
+    ciudad VARCHAR(50), 
+
+    coordenadas VARCHAR(100) 
+
+); 
+
+ 
+
+-- Tabla de Transacciones 
+
+CREATE TABLE tr_raw_bcp.transaccion ( 
+
+    transaccion_id VARCHAR(20) PRIMARY KEY, 
+
+    cuenta_id VARCHAR(20) NOT NULL, 
+
+    dispositivo_id VARCHAR(20) NOT NULL, 
+
+    ubicacion_id VARCHAR(20) NOT NULL, 
+
+    tipo_transaccion VARCHAR(50) NOT NULL, 
+
+    monto DECIMAL(18,2) NOT NULL, 
+
+    fecha TIMESTAMP NOT NULL, 
+
+    estado VARCHAR(20) NOT NULL, 
+
+    CONSTRAINT fk_cuenta 
+
+        FOREIGN KEY (cuenta_id) REFERENCES tr_raw_bcp.cuenta(cuenta_id) 
+
+        ON DELETE CASCADE, 
+
+    CONSTRAINT fk_dispositivo 
+
+        FOREIGN KEY (dispositivo_id) REFERENCES tr_raw_bcp.dispositivo(dispositivo_id), 
+
+    CONSTRAINT fk_ubicacion 
+
+        FOREIGN KEY (ubicacion_id) REFERENCES tr_raw_bcp.ubicacion(ubicacion_id) 
+
+); 
+
+ 
+
+-- Tabla de Alertas de Fraude 
+
+CREATE TABLE tr_raw_bcp.alerta_fraude ( 
+
+    alerta_id VARCHAR(20) PRIMARY KEY, 
+
+    transaccion_id VARCHAR(20) NOT NULL, 
+
+    riesgo VARCHAR(20), 
+
+    descripcion VARCHAR(255), 
+
+    detectado_ai BOOLEAN DEFAULT FALSE, 
+
+    fecha_deteccion TIMESTAMP NOT NULL, 
+
+    CONSTRAINT fk_transaccion 
+
+        FOREIGN KEY (transaccion_id) REFERENCES tr_raw_bcp.transaccion(transaccion_id) 
+
+        ON DELETE CASCADE 
+
+); 
+
+ 
+
+d. Creación de Tablas Staging 
+
+----------- CREACION DE TABLAS PARA LA CAPA STAGING (datos transformados y enriquecidos)------------- 
+
+CREATE SCHEMA stg_bcp; 
+
+ 
+
+-- Clientes con indicadores iniciales 
+
+CREATE TABLE stg_bcp.stg_cliente ( 
+
+    cliente_id VARCHAR(20) PRIMARY KEY, 
+
+    dni VARCHAR(20), 
+
+    nombres VARCHAR(100), 
+
+    apellidos VARCHAR(100), 
+
+    total_transacciones INT DEFAULT 0, 
+
+    monto_total NUMERIC(14,2) DEFAULT 0, 
+
+    ultima_transaccion TIMESTAMP, 
+
+    riesgo_cliente VARCHAR(20),      -- ALTO, MEDIO, BAJO 
+
+    desercion BOOLEAN DEFAULT FALSE, -- TRUE si no transacciona en 90d 
+
+    segmento VARCHAR(50),            -- Premium, Estandar, Basico 
+
+    fuente VARCHAR(50), 
+
+    fecha_carga TIMESTAMP DEFAULT NOW() 
+
+); 
+
+ 
+
+-- Cuentas (para mapear productos) 
+
+CREATE TABLE stg_bcp.stg_cuenta ( 
+
+    cuenta_id VARCHAR(20) PRIMARY KEY, 
+
+    cliente_id VARCHAR(20), 
+
+    tipo_cuenta VARCHAR(50), 
+
+    nombre_producto VARCHAR(100), 
+
+    categoria VARCHAR(50), 
+
+    fuente VARCHAR(50), 
+
+    fecha_carga TIMESTAMP DEFAULT NOW() 
+
+); 
+
+ 
+
+-- Dispositivos 
+
+CREATE TABLE stg_bcp.stg_dispositivo ( 
+
+    dispositivo_id VARCHAR(20) PRIMARY KEY, 
+
+    tipo_dispositivo VARCHAR(50), 
+
+    sistema_operativo VARCHAR(50), 
+
+    version_so VARCHAR(20), 
+
+    fuente VARCHAR(50), 
+
+    fecha_carga TIMESTAMP DEFAULT NOW() 
+
+); 
+
+ 
+
+-- Ubicaciones 
+
+CREATE TABLE stg_bcp.stg_ubicacion ( 
+
+    ubicacion_id VARCHAR(20) PRIMARY KEY, 
+
+    pais VARCHAR(50), 
+
+    ciudad VARCHAR(50), 
+
+    coordenadas VARCHAR(100), 
+
+    fuente VARCHAR(50), 
+
+    fecha_carga TIMESTAMP DEFAULT NOW() 
+
+); 
+
+ 
+
+-- Transacciones 
+
+CREATE TABLE stg_bcp.stg_transaccion ( 
+
+    transaccion_id VARCHAR(20) PRIMARY KEY, 
+
+    cuenta_id VARCHAR(20), 
+
+    cliente_id VARCHAR(20), 
+
+    dispositivo_id VARCHAR(20), 
+
+    ubicacion_id VARCHAR(20), 
+
+    tipo_transaccion VARCHAR(50), 
+
+    monto NUMERIC(12,2), 
+
+    fecha TIMESTAMP, 
+
+    estado VARCHAR(20), 
+
+    moneda VARCHAR(10) DEFAULT 'PEN', 
+
+    fuente VARCHAR(50), 
+
+    fecha_carga TIMESTAMP DEFAULT NOW() 
+
+); 
+
+ 
+
+-- Alertas de fraude 
+
+CREATE TABLE stg_bcp.stg_alerta ( 
+
+    alerta_id VARCHAR(20) PRIMARY KEY, 
+
+    transaccion_id VARCHAR(20), 
+
+    tipo_riesgo VARCHAR(50), 
+
+    descripcion VARCHAR(255), 
+
+    detectado_ai BOOLEAN, 
+
+    fecha_deteccion TIMESTAMP, 
+
+    fuente VARCHAR(50), 
+
+    fecha_carga TIMESTAMP DEFAULT NOW() 
+
+); 
+
+ 
+
+ 
+
+e. Creación de Tablas Dimensionales 
+
+------------- CREACION DE TABLAS PARA CAPA MASTER (modelo dimensional) ------ 
+
+CREATE SCHEMA dim_master_bcp; 
+
+ 
+
+-- Dimensión Cliente 
+
+CREATE TABLE dim_master_bcp.dim_cliente ( 
+
+    cliente_sk SERIAL PRIMARY KEY, 
+
+    cliente_id VARCHAR(20) UNIQUE NOT NULL, 
+
+    nombres VARCHAR(100), 
+
+    apellidos VARCHAR(100), 
+
+    segmento VARCHAR(50), 
+
+    riesgo_cliente VARCHAR(20),     -- Bajo, Medio, Alto 
+
+    desercion BOOLEAN, 
+
+    prob_desercion NUMERIC,         -- calculado por modelo 
+
+    clv NUMERIC,                    -- Customer Lifetime Value 
+
+    cliente_valor VARCHAR(20),      -- Alto, Medio, Bajo 
+
+    prob_riesgo NUMERIC,            -- score de riesgo 
+
+    ultima_actualizacion TIMESTAMP DEFAULT NOW() 
+
+); 
+
+ 
+
+-- Dimensión Producto 
+
+CREATE TABLE dim_master_bcp.dim_producto ( 
+
+    producto_sk SERIAL PRIMARY KEY, 
+
+    tipo_producto VARCHAR(50), 
+
+    nombre_producto VARCHAR(100), 
+
+    categoria VARCHAR(50), 
+
+    CONSTRAINT uq_producto UNIQUE (tipo_producto, nombre_producto, categoria) 
+
+); 
+
+ 
+
+-- Dimensión Tiempo 
+
+CREATE TABLE dim_master_bcp.dim_tiempo ( 
+
+    tiempo_sk SERIAL PRIMARY KEY, 
+
+    fecha DATE UNIQUE NOT NULL, 
+
+    anio INT, 
+
+    trimestre INT, 
+
+    mes INT, 
+
+    dia INT, 
+
+    dia_semana VARCHAR(15) 
+
+); 
+
+ 
+
+-- Dimensión Canal 
+
+CREATE TABLE dim_master_bcp.dim_canal ( 
+
+    canal_sk SERIAL PRIMARY KEY, 
+
+    nombre_canal VARCHAR(50) UNIQUE 
+
+); 
+
+ 
+
+-- Dimensión Dispositivo 
+
+CREATE TABLE dim_master_bcp.dim_dispositivo ( 
+
+    dispositivo_sk SERIAL PRIMARY KEY, 
+
+    dispositivo_id VARCHAR(20) UNIQUE, 
+
+    tipo_dispositivo VARCHAR(50), 
+
+    sistema_operativo VARCHAR(50), 
+
+    version_so VARCHAR(20) 
+
+); 
+
+ 
+
+-- Dimensión Ubicación 
+
+CREATE TABLE dim_master_bcp.dim_ubicacion ( 
+
+    ubicacion_sk SERIAL PRIMARY KEY, 
+
+    ubicacion_id VARCHAR(20) UNIQUE, 
+
+    pais VARCHAR(50), 
+
+    ciudad VARCHAR(50), 
+
+    coordenadas VARCHAR(100) 
+
+); 
+
+ 
+
+-- Dimensión Alerta de Fraude 
+
+CREATE TABLE dim_master_bcp.dim_alerta ( 
+
+    alerta_sk SERIAL PRIMARY KEY, 
+
+    transaccion_id VARCHAR(20) UNIQUE, 
+
+    tipo_riesgo VARCHAR(50), 
+
+    descripcion VARCHAR(255), 
+
+    detectado_ai BOOLEAN, 
+
+    fecha_deteccion TIMESTAMP 
+
+); 
+
+ 
+
+-- Tabla de Hechos: Transacciones 
+
+CREATE TABLE dim_master_bcp.fact_transaccion ( 
+
+    transaccion_sk BIGSERIAL PRIMARY KEY, 
+
+    cliente_sk INT REFERENCES dim_master_bcp.dim_cliente(cliente_sk), 
+
+    producto_sk INT REFERENCES dim_master_bcp.dim_producto(producto_sk), 
+
+    tiempo_sk INT REFERENCES dim_master_bcp.dim_tiempo(tiempo_sk), 
+
+    canal_sk INT REFERENCES dim_master_bcp.dim_canal(canal_sk), 
+
+    dispositivo_sk INT REFERENCES dim_master_bcp.dim_dispositivo(dispositivo_sk), 
+
+    ubicacion_sk INT REFERENCES dim_master_bcp.dim_ubicacion(ubicacion_sk), 
+
+    alerta_sk INT REFERENCES dim_master_bcp.dim_alerta(alerta_sk), 
+
+    monto NUMERIC(12,2) NOT NULL, 
+
+    tipo_transaccion VARCHAR(50), 
+
+    estado VARCHAR(20), 
+
+    moneda VARCHAR(10), 
+
+    tx_irregular BOOLEAN DEFAULT FALSE 
+
+); 
+
+ 
+
+Cargar la Tabla Dimensional con el Método ETL 
+
+-- Llenado del Esquema Stagging 
+
+ 
+
+INSERT INTO stg_bcp.stg_cliente ( 
+
+    cliente_id, dni, nombres, apellidos, 
+
+    total_transacciones, monto_total, ultima_transaccion, 
+
+    riesgo_cliente, desercion, segmento, fuente, fecha_carga 
+
+) 
+
+SELECT 
+
+    c.cliente_id, 
+
+    c.documento_identidad AS dni, 
+
+    SPLIT_PART(c.nombre_completo, ' ', 1) AS nombres, 
+
+    SUBSTRING(c.nombre_completo FROM POSITION(' ' IN c.nombre_completo)+1) AS apellidos, 
+
+    COUNT(t.transaccion_id) AS total_transacciones, 
+
+    COALESCE(SUM(t.monto),0) AS monto_total, 
+
+    MAX(t.fecha) AS ultima_transaccion, 
+
+    CASE 
+
+        WHEN COALESCE(SUM(t.monto),0) > 50000 THEN 'ALTO' 
+
+        WHEN COALESCE(SUM(t.monto),0) > 10000 THEN 'MEDIO' 
+
+        ELSE 'BAJO' 
+
+    END AS riesgo_cliente, 
+
+    CASE 
+
+        WHEN MAX(t.fecha) < NOW() - INTERVAL '90 days' THEN TRUE ELSE FALSE 
+
+    END AS desercion, 
+
+    CASE 
+
+        WHEN COALESCE(SUM(t.monto),0) > 50000 THEN 'Premium' 
+
+        WHEN COALESCE(SUM(t.monto),0) > 10000 THEN 'Estandar' 
+
+        ELSE 'Basico' 
+
+    END AS segmento, 
+
+    'RAW' AS fuente, 
+
+    NOW() AS fecha_carga 
+
+FROM tr_raw_bcp.cliente c 
+
+LEFT JOIN tr_raw_bcp.cuenta cu ON cu.cliente_id = c.cliente_id 
+
+LEFT JOIN tr_raw_bcp.transaccion t ON t.cuenta_id = cu.cuenta_id 
+
+GROUP BY c.cliente_id, c.documento_identidad, c.nombre_completo; 
+
+ 
+
+ 
+
+ 
+
+INSERT INTO stg_bcp.stg_cuenta ( 
+
+    cuenta_id, cliente_id, tipo_cuenta, nombre_producto, categoria, fuente, fecha_carga 
+
+) 
+
+SELECT 
+
+    cu.cuenta_id, 
+
+    cu.cliente_id, 
+
+    cu.tipo_cuenta, 
+
+    cu.tipo_cuenta AS nombre_producto, 
+
+    CASE 
+
+        WHEN cu.tipo_cuenta ILIKE '%ahorro%' THEN 'Ahorro' 
+
+        WHEN cu.tipo_cuenta ILIKE '%corriente%' THEN 'Corriente' 
+
+        ELSE 'Otro' 
+
+    END AS categoria, 
+
+    'RAW' AS fuente, 
+
+    NOW() AS fecha_carga 
+
+FROM tr_raw_bcp.cuenta cu; 
+
+ 
+
+INSERT INTO stg_bcp.stg_dispositivo ( 
+
+    dispositivo_id, tipo_dispositivo, sistema_operativo, version_so, fuente, fecha_carga 
+
+) 
+
+SELECT 
+
+    d.dispositivo_id, 
+
+    d.tipo_dispositivo, 
+
+    d.sistema_operativo, 
+
+    d.version_so, 
+
+    'RAW', 
+
+    NOW() 
+
+FROM tr_raw_bcp.dispositivo d; 
+
+ 
+
+INSERT INTO stg_bcp.stg_ubicacion ( 
+
+    ubicacion_id, pais, ciudad, coordenadas, fuente, fecha_carga 
+
+) 
+
+SELECT 
+
+    u.ubicacion_id, 
+
+    u.pais, 
+
+    u.ciudad, 
+
+    u.coordenadas, 
+
+    'RAW', 
+
+    NOW() 
+
+FROM tr_raw_bcp.ubicacion u; 
+
+ 
+
+INSERT INTO stg_bcp.stg_transaccion ( 
+
+    transaccion_id, cuenta_id, cliente_id, dispositivo_id, ubicacion_id, 
+
+    tipo_transaccion, monto, fecha, estado, moneda, fuente, fecha_carga 
+
+) 
+
+SELECT 
+
+    t.transaccion_id, 
+
+    t.cuenta_id, 
+
+    cu.cliente_id, 
+
+    t.dispositivo_id, 
+
+    t.ubicacion_id, 
+
+    t.tipo_transaccion, 
+
+    t.monto, 
+
+    t.fecha, 
+
+    t.estado, 
+
+    'PEN' AS moneda, 
+
+    'RAW', 
+
+    NOW() 
+
+FROM tr_raw_bcp.transaccion t 
+
+JOIN tr_raw_bcp.cuenta cu ON cu.cuenta_id = t.cuenta_id; 
+
+ 
+
+INSERT INTO stg_bcp.stg_alerta ( 
+
+    alerta_id, transaccion_id, tipo_riesgo, descripcion, detectado_ai, 
+
+    fecha_deteccion, fuente, fecha_carga 
+
+) 
+
+SELECT 
+
+    a.alerta_id, 
+
+    a.transaccion_id, 
+
+    a.riesgo AS tipo_riesgo, 
+
+    a.descripcion, 
+
+    a.detectado_ai, 
+
+    a.fecha_deteccion, 
+
+    'RAW', 
+
+    NOW() 
+
+FROM tr_raw_bcp.alerta_fraude a; 
+
+ 
+
+ 
+
+-- ================================ 
+
+-- DIM_CLIENTE 
+
+-- ================================ 
+
+INSERT INTO dim_master_bcp.dim_cliente ( 
+
+    cliente_id, nombres, apellidos, segmento, riesgo_cliente, 
+
+    desercion, prob_desercion, clv, cliente_valor, prob_riesgo, ultima_actualizacion 
+
+) 
+
+SELECT DISTINCT 
+
+    s.cliente_id, 
+
+    s.nombres, 
+
+    s.apellidos, 
+
+    s.segmento, 
+
+    s.riesgo_cliente, 
+
+    s.desercion, 
+
+    ROUND(RANDOM()::NUMERIC, 2) AS prob_desercion, 
+
+    (s.monto_total * 0.05)::NUMERIC AS clv, 
+
+    CASE 
+
+        WHEN s.monto_total > 50000 THEN 'ALTO' 
+
+        WHEN s.monto_total > 10000 THEN 'MEDIO' 
+
+        ELSE 'BAJO' 
+
+    END AS cliente_valor, 
+
+    ROUND(RANDOM()::NUMERIC, 2) AS prob_riesgo, 
+
+    NOW() 
+
+FROM stg_bcp.stg_cliente s 
+
+ON CONFLICT (cliente_id) DO UPDATE 
+
+SET nombres = EXCLUDED.nombres, 
+
+    apellidos = EXCLUDED.apellidos, 
+
+    segmento = EXCLUDED.segmento, 
+
+    riesgo_cliente = EXCLUDED.riesgo_cliente, 
+
+    desercion = EXCLUDED.desercion, 
+
+    clv = EXCLUDED.clv, 
+
+    cliente_valor = EXCLUDED.cliente_valor, 
+
+    prob_riesgo = EXCLUDED.prob_riesgo, 
+
+    ultima_actualizacion = NOW(); 
+
+ 
+
+-- ================================ 
+
+-- DIM_PRODUCTO 
+
+-- ================================ 
+
+INSERT INTO dim_master_bcp.dim_producto (tipo_producto, nombre_producto, categoria) 
+
+SELECT DISTINCT 
+
+    s.tipo_cuenta, s.nombre_producto, s.categoria 
+
+FROM stg_bcp.stg_cuenta s 
+
+ON CONFLICT (tipo_producto, nombre_producto, categoria) DO NOTHING; 
+
+ 
+
+-- ================================ 
+
+-- DIM_DISPOSITIVO 
+
+-- ================================ 
+
+INSERT INTO dim_master_bcp.dim_dispositivo (dispositivo_id, tipo_dispositivo, sistema_operativo, version_so) 
+
+SELECT DISTINCT 
+
+    s.dispositivo_id, s.tipo_dispositivo, s.sistema_operativo, s.version_so 
+
+FROM stg_bcp.stg_dispositivo s 
+
+ON CONFLICT (dispositivo_id) DO NOTHING; 
+
+ 
+
+-- ================================ 
+
+-- DIM_UBICACION 
+
+-- ================================ 
+
+INSERT INTO dim_master_bcp.dim_ubicacion (ubicacion_id, pais, ciudad, coordenadas) 
+
+SELECT DISTINCT 
+
+    s.ubicacion_id, s.pais, s.ciudad, s.coordenadas 
+
+FROM stg_bcp.stg_ubicacion s 
+
+ON CONFLICT (ubicacion_id) DO NOTHING; 
+
+ 
+
+-- ================================ 
+
+-- DIM_ALERTA 
+
+-- ================================ 
+
+INSERT INTO dim_master_bcp.dim_alerta (transaccion_id, tipo_riesgo, descripcion, detectado_ai, fecha_deteccion) 
+
+SELECT DISTINCT 
+
+    s.transaccion_id, s.tipo_riesgo, s.descripcion, s.detectado_ai, s.fecha_deteccion 
+
+FROM stg_bcp.stg_alerta s 
+
+ON CONFLICT (transaccion_id) DO NOTHING; 
+
+ 
+
+-- ================================ 
+
+-- DIM_TIEMPO 
+
+-- ================================ 
+
+INSERT INTO dim_master_bcp.dim_tiempo (fecha, anio, trimestre, mes, dia, dia_semana) 
+
+SELECT DISTINCT 
+
+    DATE(s.fecha), 
+
+    EXTRACT(YEAR FROM s.fecha)::INT, 
+
+    EXTRACT(QUARTER FROM s.fecha)::INT, 
+
+    EXTRACT(MONTH FROM s.fecha)::INT, 
+
+    EXTRACT(DAY FROM s.fecha)::INT, 
+
+    TO_CHAR(s.fecha, 'Day') 
+
+FROM stg_bcp.stg_transaccion s 
+
+ON CONFLICT (fecha) DO NOTHING; 
+
+ 
+
+ 
+
+-- Tabla de Hechos: Transacciones 
+
+CREATE TABLE dim_master_bcp.fact_transaccion ( 
+
+    transaccion_sk BIGSERIAL PRIMARY KEY, 
+
+    cliente_sk INT REFERENCES dim_master_bcp.dim_cliente(cliente_sk), 
+
+    producto_sk INT REFERENCES dim_master_bcp.dim_producto(producto_sk), 
+
+    tiempo_sk INT REFERENCES dim_master_bcp.dim_tiempo(tiempo_sk), 
+
+    canal_sk INT REFERENCES dim_master_bcp.dim_canal(canal_sk), 
+
+    dispositivo_sk INT REFERENCES dim_master_bcp.dim_dispositivo(dispositivo_sk), 
+
+    ubicacion_sk INT REFERENCES dim_master_bcp.dim_ubicacion(ubicacion_sk), 
+
+    alerta_sk INT REFERENCES dim_master_bcp.dim_alerta(alerta_sk), 
+
+    monto NUMERIC(12,2) NOT NULL, 
+
+    tipo_transaccion VARCHAR(50), 
+
+    estado VARCHAR(20), 
+
+    moneda VARCHAR(10), 
+
+    tx_irregular BOOLEAN DEFAULT FALSE 
+
+); 
+
+ 
+
+ 
+
+INSERT INTO dim_master_bcp.fact_transaccion ( 
+
+    cliente_sk, producto_sk, tiempo_sk, canal_sk, dispositivo_sk, ubicacion_sk, alerta_sk, 
+
+    monto, tipo_transaccion, estado, moneda, tx_irregular 
+
+) 
+
+SELECT 
+
+    c.cliente_sk, 
+
+    p.producto_sk, 
+
+    t_dim.tiempo_sk, 
+
+    NULL AS canal_sk, 
+
+    d.dispositivo_sk, 
+
+    u.ubicacion_sk, 
+
+    a.alerta_sk, 
+
+    s.monto, 
+
+    s.tipo_transaccion, 
+
+    s.estado, 
+
+    s.moneda, 
+
+    CASE WHEN a.alerta_sk IS NOT NULL THEN TRUE ELSE FALSE END AS tx_irregular 
+
+FROM stg_bcp.stg_transaccion s 
+
+JOIN dim_master_bcp.dim_cliente c   ON c.cliente_id = s.cliente_id 
+
+JOIN dim_master_bcp.dim_producto p  ON p.nombre_producto = (SELECT nombre_producto FROM stg_bcp.stg_cuenta c2 WHERE c2.cuenta_id = s.cuenta_id LIMIT 1) 
+
+JOIN dim_master_bcp.dim_tiempo t_dim ON t_dim.fecha = DATE(s.fecha) 
+
+LEFT JOIN dim_master_bcp.dim_dispositivo d ON d.dispositivo_id = s.dispositivo_id 
+
+LEFT JOIN dim_master_bcp.dim_ubicacion u   ON u.ubicacion_id = s.ubicacion_id 
+
+LEFT JOIN dim_master_bcp.dim_alerta a      ON a.transaccion_id = s.transaccion_id; 
+
+ 
+
+ 
+
+ 
+
+-- Dimensión Cliente 
+
+CREATE TABLE dim_master_bcp.dim_cliente ( 
+
+    cliente_sk SERIAL PRIMARY KEY, 
+
+    cliente_id VARCHAR(20) UNIQUE NOT NULL, 
+
+    nombres VARCHAR(100), 
+
+    apellidos VARCHAR(100), 
+
+    segmento VARCHAR(50), 
+
+    riesgo_cliente VARCHAR(20),     -- Bajo, Medio, Alto 
+
+    desercion BOOLEAN, 
+
+    prob_desercion NUMERIC,         -- calculado por modelo 
+
+    clv NUMERIC,                    -- Customer Lifetime Value 
+
+    cliente_valor VARCHAR(20),      -- Alto, Medio, Bajo 
+
+    prob_riesgo NUMERIC,            -- score de riesgo 
+
+    ultima_actualizacion TIMESTAMP DEFAULT NOW() 
+
+); 
+
+ 
+
+-- Dimensión Producto 
+
+CREATE TABLE dim_master_bcp.dim_producto ( 
+
+    producto_sk SERIAL PRIMARY KEY, 
+
+    tipo_producto VARCHAR(50), 
+
+    nombre_producto VARCHAR(100), 
+
+    categoria VARCHAR(50), 
+
+    CONSTRAINT uq_producto UNIQUE (tipo_producto, nombre_producto, categoria) 
+
+); 
+
+ 
+
+-- Dimensión Tiempo 
+
+CREATE TABLE dim_master_bcp.dim_tiempo ( 
+
+    tiempo_sk SERIAL PRIMARY KEY, 
+
+    fecha DATE UNIQUE NOT NULL, 
+
+    anio INT, 
+
+    trimestre INT, 
+
+    mes INT, 
+
+    dia INT, 
+
+    dia_semana VARCHAR(15) 
+
+); 
+
+ 
+
+-- Dimensión Canal 
+
+CREATE TABLE dim_master_bcp.dim_canal ( 
+
+    canal_sk SERIAL PRIMARY KEY, 
+
+    nombre_canal VARCHAR(50) UNIQUE 
+
+); 
+
+ 
+
+-- Dimensión Dispositivo 
+
+CREATE TABLE dim_master_bcp.dim_dispositivo ( 
+
+    dispositivo_sk SERIAL PRIMARY KEY, 
+
+    dispositivo_id VARCHAR(20) UNIQUE, 
+
+    tipo_dispositivo VARCHAR(50), 
+
+    sistema_operativo VARCHAR(50), 
+
+    version_so VARCHAR(20) 
+
+); 
+
+ 
+
+-- Dimensión Ubicación 
+
+CREATE TABLE dim_master_bcp.dim_ubicacion ( 
+
+    ubicacion_sk SERIAL PRIMARY KEY, 
+
+    ubicacion_id VARCHAR(20) UNIQUE, 
+
+    pais VARCHAR(50), 
+
+    ciudad VARCHAR(50), 
+
+    coordenadas VARCHAR(100) 
+
+); 
+
+ 
+
+-- Dimensión Alerta de Fraude 
+
+CREATE TABLE dim_master_bcp.dim_alerta ( 
+
+    alerta_sk SERIAL PRIMARY KEY, 
+
+    transaccion_id VARCHAR(20) UNIQUE, 
+
+    tipo_riesgo VARCHAR(50), 
+
+    descripcion VARCHAR(255), 
+
+    detectado_ai BOOLEAN, 
+
+    fecha_deteccion TIMESTAMP 
+
+); 
+
+ 
+
+ 
+
+ 
+
+--BORRAR LOS DATOS de STG-BCP 
+
+TRUNCATE TABLE 
+
+    stg_bcp.stg_alerta, 
+
+    stg_bcp.stg_cliente, 
+
+    stg_bcp.stg_cuenta, 
+
+    stg_bcp.stg_dispositivo, 
+
+    stg_bcp.stg_transaccion, 
+
+    stg_bcp.stg_ubicacion 
+
+RESTART IDENTITY CASCADE; 
+
+ 
+
+--BORRAR LOS DATOS DE DIM_MASTER_BCP 
+
+TRUNCATE TABLE 
+
+    dim_master_bcp.dim_alerta, 
+
+    dim_master_bcp.dim_canal, 
+
+    dim_master_bcp.dim_cliente, 
+
+    dim_master_bcp.dim_dispositivo, 
+
+    dim_master_bcp.dim_producto, 
+
+    dim_master_bcp.dim_tiempo, 
+
+    dim_master_bcp.dim_ubicacion, 
+
+    dim_master_bcp.fact_transaccion 
+
+RESTART IDENTITY CASCADE; 
+
+ 
+
+ 
